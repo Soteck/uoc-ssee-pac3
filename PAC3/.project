@@ -36,9 +36,5 @@
 			<name>ORIGINAL_PROJECT_ROOT</name>
 			<value>$%7BPROJECT_LOC%7D</value>
 		</variable>
-		<variable>
-			<name>copy_PARENT</name>
-			<value>$%7BPARENT-3-PROJECT_LOC%7D/PEC03</value>
-		</variable>
 	</variableList>
 </projectDescription>
