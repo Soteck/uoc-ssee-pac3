@@ -102,6 +102,8 @@ static void BuildAndSendAction(uint8_t, bumper_side);
 static void RunTimer(uint8_t, TimerHandle_t, TickType_t);
 static void button1_interrupt(void);
 static void button2_interrupt(void);
+static void configureMotors(void);
+static void changeDirection(motor_dir_e direction);
 
 //Task sync tools and variables
 SemaphoreHandle_t xBumperReceived;
@@ -109,6 +111,8 @@ QueueHandle_t xQueueActions;
 TimerHandle_t xRMotorTimer;
 TimerHandle_t xLMotorTimer;
 motor_dir_e motorDirection;
+uint8_t x_R_timer_running = 0;
+uint8_t x_L_timer_running = 0;
 
 /*----------------------------------------------------------------------------*/
 
@@ -135,8 +139,10 @@ static void ActuationTask(void *pvParameters) {
             TickType_t ticks = pdMS_TO_TICKS(BumperToPeriod(commandToReceive.code));
 
             if(commandToReceive.side == left){
+                x_L_timer_running = 1;
                 RunTimer(MOTOR_LEFT, xLMotorTimer, ticks);
             }else{
+                x_R_timer_running = 1;
                 RunTimer(MOTOR_RIGHT, xRMotorTimer, ticks);
             }
         }
@@ -230,19 +236,29 @@ static void BumperCallback(uint8_t bumperHit) {
 void timerCallback(TimerHandle_t xTimer) {
     if ((uint32_t) pvTimerGetTimerID(xTimer) == 0) {
         MotorStop(MOTOR_LEFT);
+        x_L_timer_running = 0;
         xTimerStop(xLMotorTimer, xMaxExpectedBlockTime);
     }else{
         MotorStop(MOTOR_RIGHT);
+        x_R_timer_running = 0;
         xTimerStop(xRMotorTimer, xMaxExpectedBlockTime);
     }
     //Al terminar cualquier timer, forzamos una nueva lectura de los bumpers para resetear el change state
     xSemaphoreGiveFromISR(xBumperReceived, &xHigherPriorityTaskWoken);
+    //
+
+    if(
+            (x_R_timer_running == 0) &&
+            (x_L_timer_running == 0)
+            ){
+        configureMotors();
+    }
 }
 
 
 /*----------------------------------------------------------------------------*/
 
-void configureMotors(motor_dir_e direction){
+void changeDirection(motor_dir_e direction){
     if(direction == NULL){
         if(motorDirection == MOTOR_DIR_FORWARD){
             direction = MOTOR_DIR_BACKWARD;
@@ -258,16 +274,19 @@ void configureMotors(motor_dir_e direction){
         led_on(MSP432_LAUNCHPAD_LED_GREEN);
         led_off(MSP432_LAUNCHPAD_LED_BLUE);
     }
-    MotorConfigure(MOTOR_LEFT, direction, MOTOR_PWM);
-    MotorConfigure(MOTOR_RIGHT, direction, MOTOR_PWM);
+}
+
+void configureMotors(){
+    MotorConfigure(MOTOR_LEFT, motorDirection, MOTOR_PWM);
+    MotorConfigure(MOTOR_RIGHT, motorDirection, MOTOR_PWM);
 }
 
 void button1_interrupt(){
-    configureMotors(MOTOR_DIR_FORWARD);
+    changeDirection(MOTOR_DIR_FORWARD);
 }
 
 void button2_interrupt(){
-    configureMotors(MOTOR_DIR_BACKWARD);
+    changeDirection(MOTOR_DIR_BACKWARD);
 }
 
 
@@ -283,7 +302,7 @@ int main(int argc, char** argv)
     /* Initialize the board */
     board_init();
     MotorInit();
-    configureMotors(MOTOR_DIR_FORWARD);
+    changeDirection(MOTOR_DIR_FORWARD);
     BumpInt_Init(BumperCallback);
     board_buttons_set_callback(MSP432_LAUNCHPAD_BUTTON_S1, button1_interrupt);
     board_buttons_set_callback(MSP432_LAUNCHPAD_BUTTON_S2, button2_interrupt);
