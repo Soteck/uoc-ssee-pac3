@@ -52,6 +52,7 @@
 #include "msp432_launchpad_board.h"
 #include "BumpInt.h"
 #include "driverlib.h"
+#include "motor.h"
 
 
 /*----------------------------------------------------------------------------*/
@@ -101,8 +102,8 @@ static void RunTimer(uint8_t, TimerHandle_t, TickType_t);
 //Task sync tools and variables
 SemaphoreHandle_t xBumperReceived;
 QueueHandle_t xQueueActions;
-TimerHandle_t xBlueTimer;
-TimerHandle_t xGreenTimer;
+TimerHandle_t xRMotorTimer;
+TimerHandle_t xLMotorTimer;
 
 /*----------------------------------------------------------------------------*/
 
@@ -129,9 +130,9 @@ static void ActuationTask(void *pvParameters) {
             TickType_t ticks = pdMS_TO_TICKS(BumperToPeriod(commandToReceive.code));
 
             if(commandToReceive.side == left){
-                RunTimer(MSP432_LAUNCHPAD_LED_GREEN, xGreenTimer, ticks);
+                RunTimer(MOTOR_LEFT, xLMotorTimer, ticks);
             }else{
-                RunTimer(MSP432_LAUNCHPAD_LED_BLUE, xBlueTimer, ticks);
+                RunTimer(MOTOR_RIGHT, xRMotorTimer, ticks);
             }
         }
     }
@@ -141,8 +142,8 @@ static void ActuationTask(void *pvParameters) {
  * Primero asegura que el led este encendido, luego, si el timer está corriendo, aumenta en "ticks" el tiempo que va a estar corriendo.
  * Si no esta corriendo, lo arranca por ticks pasados por param
  */
-static void RunTimer(uint8_t led, TimerHandle_t timer, TickType_t ticks){
-    led_on(led);
+static void RunTimer(motor_e motor, TimerHandle_t timer, TickType_t ticks){
+    MotorStart(motor);
     if( xTimerIsTimerActive( timer ) != pdFALSE ){
         ticks = ticks + xTimerGetPeriod(timer);
         xTimerChangePeriod(timer, ticks, xMaxExpectedBlockTime );
@@ -223,11 +224,11 @@ static void BumperCallback(uint8_t bumperHit) {
  */
 void timerCallback(TimerHandle_t xTimer) {
     if ((uint32_t) pvTimerGetTimerID(xTimer) == 0) {
-        led_off(MSP432_LAUNCHPAD_LED_GREEN);
-        xTimerStop(xGreenTimer, xMaxExpectedBlockTime);
+        MotorStop(MOTOR_LEFT);
+        xTimerStop(xLMotorTimer, xMaxExpectedBlockTime);
     }else{
-        led_off(MSP432_LAUNCHPAD_LED_BLUE);
-        xTimerStop(xBlueTimer, xMaxExpectedBlockTime);
+        MotorStop(MOTOR_RIGHT);
+        xTimerStop(xRMotorTimer, xMaxExpectedBlockTime);
     }
     //Al terminar cualquier timer, forzamos una nueva lectura de los bumpers para resetear el change state
     xSemaphoreGiveFromISR(xBumperReceived, &xHigherPriorityTaskWoken);
@@ -247,6 +248,9 @@ int main(int argc, char** argv)
 
     /* Initialize the board */
     board_init();
+    MotorInit();
+    MotorConfigure(MOTOR_LEFT, MOTOR_DIR_FORWARD, 50);
+    MotorConfigure(MOTOR_RIGHT, MOTOR_DIR_FORWARD, 50);
     BumpInt_Init(BumperCallback);
 
     if ( (xBumperReceived != NULL) && (xQueueActions != NULL)) {
@@ -274,8 +278,8 @@ int main(int argc, char** argv)
 
 
         /* Timers */
-        xGreenTimer = xTimerCreate( "Green led timer", 1,  pdFALSE, (void *) 0,  timerCallback);
-        xBlueTimer = xTimerCreate( "Blue led timer", 1,  pdFALSE, (void *) 1,  timerCallback);
+        xLMotorTimer = xTimerCreate( "L motor timer", 1,  pdFALSE, (void *) 0,  timerCallback);
+        xRMotorTimer = xTimerCreate( "R motor timer", 1,  pdFALSE, (void *) 1,  timerCallback);
         /* Start the task scheduler */
         vTaskStartScheduler();
     }
