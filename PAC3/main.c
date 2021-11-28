@@ -69,6 +69,8 @@
 
 #define QUEUE_SIZE                  ( 50 )
 
+#define MOTOR_PWM               ( 50 )
+
 /*----------------------------------------------------------------------------*/
 
 typedef enum{
@@ -98,12 +100,15 @@ static void BumperCallback(uint8_t);
 static uint32_t BumperToPeriod(uint8_t);
 static void BuildAndSendAction(uint8_t, bumper_side);
 static void RunTimer(uint8_t, TimerHandle_t, TickType_t);
+static void button1_interrupt(void);
+static void button2_interrupt(void);
 
 //Task sync tools and variables
 SemaphoreHandle_t xBumperReceived;
 QueueHandle_t xQueueActions;
 TimerHandle_t xRMotorTimer;
 TimerHandle_t xLMotorTimer;
+motor_dir_e motorDirection;
 
 /*----------------------------------------------------------------------------*/
 
@@ -237,6 +242,35 @@ void timerCallback(TimerHandle_t xTimer) {
 
 /*----------------------------------------------------------------------------*/
 
+void configureMotors(motor_dir_e direction){
+    if(direction == NULL){
+        if(motorDirection == MOTOR_DIR_FORWARD){
+            direction = MOTOR_DIR_BACKWARD;
+        }else{
+            direction = MOTOR_DIR_FORWARD;
+        }
+    }
+    motorDirection = direction;
+    if(direction == MOTOR_DIR_FORWARD){
+        led_on(MSP432_LAUNCHPAD_LED_BLUE);
+        led_off(MSP432_LAUNCHPAD_LED_GREEN);
+    }else{
+        led_on(MSP432_LAUNCHPAD_LED_GREEN);
+        led_off(MSP432_LAUNCHPAD_LED_BLUE);
+    }
+    MotorConfigure(MOTOR_LEFT, direction, MOTOR_PWM);
+    MotorConfigure(MOTOR_RIGHT, direction, MOTOR_PWM);
+}
+
+void button1_interrupt(){
+    configureMotors(MOTOR_DIR_FORWARD);
+}
+
+void button2_interrupt(){
+    configureMotors(MOTOR_DIR_BACKWARD);
+}
+
+
 int main(int argc, char** argv)
 {
     int32_t retVal = -1;
@@ -249,9 +283,10 @@ int main(int argc, char** argv)
     /* Initialize the board */
     board_init();
     MotorInit();
-    MotorConfigure(MOTOR_LEFT, MOTOR_DIR_FORWARD, 50);
-    MotorConfigure(MOTOR_RIGHT, MOTOR_DIR_FORWARD, 50);
+    configureMotors(MOTOR_DIR_FORWARD);
     BumpInt_Init(BumperCallback);
+    board_buttons_set_callback(MSP432_LAUNCHPAD_BUTTON_S1, button1_interrupt);
+    board_buttons_set_callback(MSP432_LAUNCHPAD_BUTTON_S2, button2_interrupt);
 
     if ( (xBumperReceived != NULL) && (xQueueActions != NULL)) {
 
