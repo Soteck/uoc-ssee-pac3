@@ -230,6 +230,16 @@ static void BumperCallback(uint8_t bumperHit) {
 }
 
 
+
+void checkReconfigureMotors(){
+    if(
+            (x_R_timer_running == 0) &&
+            (x_L_timer_running == 0)
+            ){
+        configureMotors();
+    }
+}
+
 /**
  * Callback de los timers. Depende del timer terminado, apaga el led y resetea el timer
  */
@@ -246,13 +256,7 @@ void timerCallback(TimerHandle_t xTimer) {
     //Al terminar cualquier timer, forzamos una nueva lectura de los bumpers para resetear el change state
     xSemaphoreGiveFromISR(xBumperReceived, &xHigherPriorityTaskWoken);
     //
-
-    if(
-            (x_R_timer_running == 0) &&
-            (x_L_timer_running == 0)
-            ){
-        configureMotors();
-    }
+    checkReconfigureMotors();
 }
 
 
@@ -274,6 +278,7 @@ void changeDirection(motor_dir_e direction){
         led_on(MSP432_LAUNCHPAD_LED_GREEN);
         led_off(MSP432_LAUNCHPAD_LED_BLUE);
     }
+    checkReconfigureMotors();
 }
 
 void configureMotors(){
